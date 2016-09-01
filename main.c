@@ -9,10 +9,29 @@
 #include <unistd.h>
 #include <dirent.h>
 
+char mass[250][250];
+int i=0,w=0,j;
+
 void sig_winch(int signo){
   struct winsize size;
   ioctl(fileno(stdout), TIOCGWINSZ, (char*) &size);
   resizeterm(size.ws_row, size.ws_col);
+}
+
+void dir(char *path){//Считывание дериктории
+  i=0;
+  DIR *fd = opendir(path);
+  struct dirent *q;
+  for(j=0;j<250;j++){
+    strcpy(mass[j], " ");
+  }
+  while((q = readdir(fd)) != NULL){
+    if(strcmp(q->d_name,".")!=0){
+      strcpy(mass[i], q->d_name);
+      i++;
+    }
+  }
+  closedir(fd);
 }
 
 int main(int argc, char **argv){
@@ -36,21 +55,7 @@ int main(int argc, char **argv){
   leftwnd = derwin(wnd, size.ws_row, (int)size.ws_col/2, 0, 0);
   // box(leftwnd,'|','-');
   scrollok(leftwnd,true);
-
-  //Считыванеи дериктории
-  DIR *fd = opendir("./");
-  struct dirent *q;
-  int i=0,w=0,j;
-  char mass[250][250];
-  for(j=0;j<250;j++){
-    strcpy(mass[j], " ");
-  }
-  while((q = readdir(fd)) != NULL){
-    if(strcmp(q->d_name,".")!=0){
-      strcpy(mass[i], q->d_name);
-      i++;
-    }
-  }
+  dir("./");
   for(j=i-1;j>=0;j--){
     wprintw(leftwnd," %s\n",mass[j]);
   }
@@ -71,6 +76,8 @@ int main(int argc, char **argv){
   int col = 0, row = 0;
   int temp,activ=1,nstr=i-1;
 
+  char path[512],pathleft[512] = "./",pathright[512] = "./";
+  strcpy(path,pathleft);
 //СЧИТЫВАНИЕ
   while(true){
     wclear(activwnd);
@@ -85,19 +92,32 @@ int main(int argc, char **argv){
         wattron(activwnd,COLOR_PAIR(0));
       }
     }
+    // применение изменения окна
     wrefresh(activwnd);
 
     temp = (int)getch();
     //printf("%d ",temp);
     switch (temp){
+      case 10: {//ENTER
+        sprintf(path,"%s%s/",path,mass[nstr]);
+        dir(path);
+        nstr=i-1;
+      }; break;
+
       case 9:{//Смена рабочего экрана
         if(activ==1){
           activwnd=rightwnd;
+          strcpy(pathleft,path);
+          strcpy(path,pathright);
           activ=0;
         } else {
           activwnd=leftwnd;
+          strcpy(pathright,path);
+          strcpy(path,pathleft);
           activ=1;
         }
+        dir(path);
+        nstr=i-1;
        }; break;
 
       case KEY_UP: {
@@ -119,7 +139,6 @@ int main(int argc, char **argv){
         delwin(wnd);
         move(9, 0);
         refresh();
-        closedir(fd);
         endwin();
         exit(EXIT_SUCCESS);
       }; break;
