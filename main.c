@@ -6,10 +6,15 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
 
-char mass[250][250];
+struct files_inf{
+  char name[250];
+  int type;
+}mass[250];
+//char mass[250][250];
 int i=0,w=0,j;
 
 void sig_winch(int signo){
@@ -19,19 +24,23 @@ void sig_winch(int signo){
 }
 
 void dir(char *path){//Считывание дериктории
+  FILE *f = fopen("test.txt","w");
   i=0;
   DIR *fd = opendir(path);
   struct dirent *q;
   for(j=0;j<250;j++){
-    strcpy(mass[j], " ");
+    strcpy(mass[j].name, " ");
   }
   while((q = readdir(fd)) != NULL){
     if(strcmp(q->d_name,".")!=0){
-      strcpy(mass[i], q->d_name);
+      strcpy(mass[i].name, q->d_name);
+      mass[i].type = q->d_type;
+      fprintf(f,"%s %d\n",mass[i].name,mass[i].type );
       i++;
     }
   }
   closedir(fd);
+  fclose(f);
 }
 
 int main(int argc, char **argv){
@@ -57,7 +66,7 @@ int main(int argc, char **argv){
   scrollok(leftwnd,true);
   dir("./");
   for(j=i-1;j>=0;j--){
-    wprintw(leftwnd," %s\n",mass[j]);
+    wprintw(leftwnd," %s\n",mass[j].name);
   }
 
   //Рабочее поле правое
@@ -65,7 +74,7 @@ int main(int argc, char **argv){
   // box(rightwnd,'|','-');
   scrollok(rightwnd,true);
   for(j=i-1;j>=0;j--){
-    wprintw(rightwnd," %s\n",mass[j]);
+    wprintw(rightwnd," %s\n",mass[j].name);
   }
 
   wrefresh(wnd);
@@ -86,7 +95,7 @@ int main(int argc, char **argv){
         wattroff(activwnd,COLOR_PAIR(0));
         wattron(activwnd,COLOR_PAIR(1));
       }
-      wprintw(activwnd," %s\n",mass[j]);
+      wprintw(activwnd," %s\n",mass[j].name);
       if(j==nstr){
         wattroff(activwnd,COLOR_PAIR(1));
         wattron(activwnd,COLOR_PAIR(0));
@@ -99,17 +108,54 @@ int main(int argc, char **argv){
     //printf("%d ",temp);
     switch (temp){
       case 10: {//ENTER
-        sprintf(path,"%s%s/",path,mass[nstr]);
-        dir(path);
-        nstr=i-1;
+        if(mass[nstr].type == 4) { //если папка
+          sprintf(path,"%s%s/",path,mass[nstr].name);
+          dir(path);
+          nstr = i - 1;
+        } else {  //если файл
+          int fd[2];
+          pipe(fd);
+          switch(fork()){
+            case 0: {
+              dup2(fd[1],1);
+              close(fd[0]);
+              execlp("ls","ls","-l",mass[nstr].name,NULL);
+            } break;
+            default:{
+              close(fd[1]);
+              char buf[255];
+              read(fd[0],buf,255);
+              if(buf[3] == 'x'){ //исполняемый
+                switch(fork()){
+                  case 0:
+                    close(fd[0]);
+                    execlp(mass[nstr].name,mass[nstr].name,NULL);
+                  break;
+                  default:
+                    close(fd[0]);
+                  break;
+                }
+              } else { //все остальные(редактор)
+                switch(fork()){
+                  case 0:
+                    execlp("../editor/1","1",NULL);
+                  break;
+                  default:
+                    wait(0);
+                  break;
+                }
+              }
+            } break;
+          }
+        }
       }; break;
 
       case 9:{//Смена рабочего экрана
-        if(activ==1){
+        if(activ == 1){
           activwnd=rightwnd;
           strcpy(pathleft,path);
           strcpy(path,pathright);
-          activ=0;
+          activ = 0;
         } else {
           activwnd=leftwnd;
           strcpy(pathright,path);
